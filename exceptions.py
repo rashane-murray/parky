@@ -1,0 +1,2 @@
+class LotIsFullError(Exception):
+    pass

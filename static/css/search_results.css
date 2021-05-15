@@ -1,0 +1,137 @@
+@charset "UTF-8";
+:root {
+	--star-size: 30px;
+	--star-color: #ddd;
+	--star-background: #fc0;
+}
+
+.stars {
+	--percent: calc(var(--rating) / 5 * 100%);
+	display: inline-block;
+	font-size: var(--star-size);
+	font-family: Times;
+	line-height: 1;
+}
+.stars::before {
+	content: "★★★★★";
+	letter-spacing: 3px;
+	background: linear-gradient(90deg, var(--star-background) var(--percent), var(--star-color) var(--percent));
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+th{
+	padding-left:10px;
+	padding-right:10px;
+	text-align: center;
+}
+
+td{
+	padding-left:10px;
+	padding-right:10px;
+	text-align: center;
+}
+
+#previous-page{
+	display: none;
+}
+
+.score-tooltip{
+	
+	width: 600px;
+	height: 600px;
+	background-color: #333;
+	color: #ddd;
+	text-align: center;
+	border-radius: 6px;
+	padding: 5px 0;
+	position: absolute;
+	z-index: 1;
+	bottom: 150%;
+	left: 50%;
+	margin-left: -60px;
+}
+
+
+
+/**.stars .score-tooltip::after{
+	content: "";
+	position: absolute;
+	top: 100%;
+	left: 50%;
+	margin-left: -5px;
+	border-width: 5px;
+	border-style: solid;
+	border-color: black transparent transparent transparent;
+} */
+
+.stars:hover .score-tooltip{
+	visibility: visible;
+}
+
+.modal{
+	
+	display: none; /* Hidden by default */
+	position: fixed; /* Stay in place */
+	z-index: 1; /* Sit on top */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0,0,0); /* Fallback color */
+	background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.modal-content{
+	
+	background-color: #fefefe;
+	margin: 15% auto; /* 15% from the top and centered */
+	padding: 20px;
+	border: 1px solid #888;
+	width: 80%; /* Could be more or less, depending on screen size */
+}
+
+.form-input{
+	width: 100%;
+    padding: 8px 8px;
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-radius: 3px !important;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 14px;
+    font-weight: normal;
+	margin-top: 5px;
+	margin-bottom: 5px;
+    font-style: normal;
+    line-height: 1.2em;
+    background-color: transparent;
+    border-color: #cccccc;
+}
+
+.form-btn{
+	background-color: rgb(45, 97, 241);
+	color: #fff;
+	font-weight: bold;
+	border: solid;
+}
+
+.background
+{
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	top: 0;
+	left: 0 ;
+	-webkit-filter: blur(5px);
+	filter: blur(5px);
+	background:  linear-gradient(transparent, rgba(0, 0, 0, .5)), url("https://images.pexels.com/photos/4827/nature-forest-trees-fog.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=750&w=1260");
+	background-size: cover;
+	background-position: center;
+}
+
+
+	
+
+
+			

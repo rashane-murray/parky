@@ -1,0 +1,53 @@
+html{
+    overflow: hidden;
+    background-color: #fff;
+}
+
+#landing-info{
+    float:left;
+    width:40%;
+    margin-left: 10px;
+    margin-right: 10px;
+    margin-top: 110px;
+    
+}
+#landing-info h1{
+    font-weight:  bold;
+}
+
+#landing-img{
+    float:left;
+    width: 40%;
+    height: 100%;
+}
+
+.landing-btn{
+    margin-right:20px;
+    padding-left: 20px;
+    border-radius: 5px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    padding-right: 20px;
+    border: none;
+    color: #fff;
+}
+
+#landing-reg{
+    background-color: rgb(0, 89, 255);
+    
+}
+#landing-reg:hover{
+    background-color: rgb(0, 132, 255);
+    
+}
+
+#landing-log{
+    background-color: rgb(0, 163, 101);
+}
+#landing-log:hover{
+    background-color: rgb(0, 199, 123);
+}
+
+#landing-img img{
+    object-fit:cover;
+}

@@ -1,0 +1,66 @@
+main{
+    background-color: #eee;
+    padding-left: 200px;
+}
+
+#reg-form-area{
+    background-color: #FFF;
+    border-radius: 5px;
+    width: 75%;
+    padding-bottom:40px;
+}
+
+
+
+.form-input{
+    border-radius:5px;
+    border: solid 1px;
+    border-color: #ddd;
+    margin-left: 30px;
+    margin-right: 30px;
+    width: 80%;
+}
+
+.form-input-label{
+    margin-left: 30px;
+    margin-right: 30px;
+    font-weight: bold;
+}
+
+.save-btn{
+    background-color: rgb(0, 143, 119);
+    color: #fff;
+    width: 20%;
+    padding: 5px;
+}
+
+.save-btn:hover{
+    background-color: rgb(1, 196, 163);
+}
+
+.half{
+    width:37.5%;
+}
+
+.form-button{
+    border: 0px;
+    background-color: #22f;
+    color: #fff;
+    font-weight: bold;
+    width:15%;
+    height: 40px;
+}
+
+.form-button:hover{
+    border: 0px;
+    background-color: #55f;
+    color: #fff;
+    font-weight: bold;
+    
+}
+
+.form-media{
+    background-color: none;
+    border: 0px;
+}
+
