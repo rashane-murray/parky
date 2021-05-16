@@ -15,3 +15,7 @@ email_validator
 PyJWT==2.0.1
 qrcode
 stripe
+flask_login
+mysqlclient
+flask_sqlalchemy
+sqlalchemy
