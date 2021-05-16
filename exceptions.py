@@ -1,2 +1,0 @@
-class LotIsFullError(Exception):
-    pass
