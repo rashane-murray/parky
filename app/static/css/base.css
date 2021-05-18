@@ -14,10 +14,11 @@ body{
     font-family:Verdana, Geneva, Tahoma, sans-serif;
 }
 
+.hidden{
+    display: none;
+}
 .navitem{
-    margin-left: 100px;
-    margin-right: 200px;
-    margin-top:-20px;
+    
     text-decoration: none;
     align-self: center;
 }
@@ -50,6 +51,11 @@ header a:hover{
 
 #business-name{
     margin-left:5px;
+    padding-left: 10px;
+}
+
+#car{
+    margin-right:10px;
 }
 
 .account-ctrls{

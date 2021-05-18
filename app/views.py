@@ -11,14 +11,15 @@ from app import app, db, login_manager
 from json import JSONEncoder
 from flask import render_template, request, redirect, url_for, flash, jsonify, make_response
 from flask_login import login_user, logout_user, current_user, login_required
-from .forms import LoginForm, RegisterUserForm, AddCarForm, SearchForm, ReservationForm
+from .forms import LoginForm, RegistrationForm, SearchForm, ReservationForm, ChangeStateForm, RegisterLotForm
 from .exceptions import LotIsFullError
-from .models import User, Reservation, Lot
-from werkzeug.security import check_password_hash
+from .models import User, Reservation, Lot, query
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 from datetime import datetime
-from random import random, choice
-from math import floor, ceil
+from random import random, choice, uniform, randint
+from sqlalchemy import create_engine, MetaData
+from math import floor, ceil, sqrt
 from secrets import token_urlsafe
 import stripe
 
@@ -33,51 +34,53 @@ class MyEncoder(JSONEncoder):
     def default(self, o):
         return o.__dict__  
 
-global NUM_REQUESTS 
+
 global REQUESTS  #setting the requests to be a blank dictionary of requests
-global INUSE_FLAG 
-ALPHA = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split()
+global SESSIONS
 
-
-
-NUM_REQUESTS = 0
 REQUESTS = {}
-INUSE_FLAG = 0
-LOTS = []
+SESSIONS = {}
+
+ALPHA = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z".split()
 
 def make_lots(n = 100):
     return [random_lot() for x in range(n)]
 
+
 def random_lot():
-    cap = floor(random()*100)
-    occ =floor(random()*cap)
+    cap = randint(0, 100)
+    occ =randint(0, cap)
     rem = cap - occ
     lot = {
-        "id": floor(random()*100),
+        "id": randint(0, 100),
         "cap": cap,
         "occupied": occ,
+        "owner_id": 3,
         "remaining": rem,
-        "rate": round(random()*500, 2),
-        "rating" : round(random()*5, 2),
+        "rate": round(uniform(100, 500), 2),
+        "rating" : round(uniform(0, 5), 2),
         "lot_addr": "{} {}".format(''.join([choice(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]) for x in range(4)]), ''.join([choice(ALPHA) for x in range(12)]))
     }
     return lot
 
-"""
-def make_car_dict(fave: int):
-    print("hey")
-    car = Car.query.filter_by(id=fave).first()
-    buff = {}
-    
-    buff['make'] = car.__dict__['make']
-    buff['model'] = car.__dict__['model']
-    buff['photo'] = car.__dict__['photo']
-    buff['year'] = car.__dict__['year']
-    buff['id'] = car.__dict__['id']
-    buff['price'] = car.__dict__['price']
-   
-    return buff
-"""
+def setup_lots(n = 100):
+    print("Attempting to set up database")
+    for x in range(0, n):
+        cap = randint(0, 100)
+        owner_id = 3 + (x//20)
+        latitude = uniform(17, 19)
+        longitude = uniform(-79, -76)
+        addr = "{} {}".format(''.join([choice(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]) for x in range(4)]), ''.join([choice(ALPHA) for x in range(12)]))
+        hourly_rate = uniform(100, 500)
+        num_ratings = randint(1, 100)
+        rating = uniform(0, 5)
+        certified = True
+        title_address = None
+        sql = ("insert into lots (street_addr, latitude, num_ratings, avg_rating, longitude, hourly_rate, title_address, owner_id, capacity, certified, occupied) values ('{}', {}, {}, {}, {}, {}, {}, {}, {}, {}, {});".format(addr,latitude, num_ratings, rating, longitude, hourly_rate, "NULL", owner_id, cap ,certified, 0)) 
+        query(sql)
+        #lot = Lot(street_addr=, latitude=, num_ratings=, avg_rating=, longitude=, hourly_rate=, title_address=, owner_id=, capacity=, certified = )
+        #db.session.add(lot)
+    db.session.commit()
 
 def make_lot_dict(lot):
     buff = {}
@@ -93,19 +96,25 @@ def get_res_slice(lst, n = 20):
 
 @app.route("/")
 def prepare():
-    pass    
+    return redirect("/index")
 
 @app.route("/api/set")
 def set_token():
-    global NUM_REQUESTS 
+    lat = float(request.args.get('lat'))
+    longi = float(request.args.get('long'))
+    # Cartesian approximation to a 55m radius around the spots
+    low_lat = lat-0.5
+    low_longi = longi+0.5
+    high_lat = lat+0.5
+    high_longi = longi-0.5
     global REQUESTS  #setting the requests to be a blank dictionary of requests
     # atomicise these actions, semaphore unnecessary
     tok = token_urlsafe(16)
-    lst = make_lots(n = 100)
-    REQUESTS[tok] = lst
+    lst = query("SELECT * from lots where latitude > {} and latitude < {} and longitude > {} and longitude < {};".format(low_lat, high_lat, high_longi, low_longi)).fetchall()
+    
+    REQUESTS[tok] = (lst, (longi, lat))
     return jsonify(tok, 200)
     
-
 def subtract_times(start, end):
     start = list(map(int, start.split(":")))
     end = list(map(int, end.split(":")))
@@ -139,12 +148,11 @@ def create_checkout_session():
                 },
             ],
             mode = 'payment',
-            success_url = "http://127.0.0.1:5000/set",
-            cancel_url = "http://127.0.0.1:5000/set"
+            success_url = "http://127.0.0.1:5000/api/pay_success/{}".format(form.user_id.data),
+            cancel_url = "http://127.0.0.1:5000/api/pay_failure"
         )
         print(checkout_session)
         return jsonify({'id':checkout_session.id}), 200
-    
 
 @app.route('/api/pay_success')
 def payment_success():
@@ -156,23 +164,84 @@ def payment_failure():
     flash("Payment failed", "danger")
     return redirect("/set")
 
-@app.route("/api/reservations/<user_id>")
+@app.route('/demo_setup', methods = ['GET'])
+def setup_demo():
+    setup_lots()
+    return redirect("/set")
+
+@app.route("/api/reservations/<user_id>", methods= ['GET'])
 def get_reservations(user_id):
     try:
         reservations = []
         role = request.args.get('role')
-        if (role == "owner"):
+        
+        if (role == "O"):
             lots = Lot.query.filter_by(owner_id = user_id) # Get the list of lots the user owns
             for lot in lots:
-                reservations.append(Reservation.query.filter_by(lot_id = lot.lot_id)) # Get the reservations pending on each lot
-        elif (role == "motorist"):
-            reservations = Reservation.query.filter_by(user_id = user_id)
-        reservations = list(map(make_reservation_dict, reservations))
-        return jsonify(reservations), 200
+                buffer = query("SELECT res_id, driver_name, state, license_plate, reservations.lot_id, start_time, end_time, media_address, street_addr FROM reservations INNER JOIN lots ON reservations.lot_id = lots.lot_id where lots.lot_id = {};".format(lot.lot_id)).all()
+                
+                reservations.append(buffer)
+        elif (role == "M"):
+            rezzes = query("SELECT res_id, driver_name, state, license_plate, reservations.lot_id, start_time, end_time, media_address, street_addr FROM reservations INNER JOIN lots ON reservations.lot_id = lots.lot_id where reservations.user_id = {};".format(user_id)).all()
+            for res in rezzes:
+                buff = {
+                    "res_id":res['res_id'],
+                    "driver_name":res['driver_name'],
+                    "state":res['state'],
+                    "license_plate":res['license_plate'],
+                    "lot_id":res["lot_id"],
+                    "start_time":res['start_time'],
+                    "end_time":res['end_time'],
+                    "qrcode":res['media_address'],
+                    "street_addr":res['street_addr'],
+                }
+                reservations.append(buff)
+        response = {
+            "reservations": reservations,
+            "message": "List of options",
+            "num_reservations": len(reservations)
+        }
+        print(reservations)
+        return jsonify(response), 200
     except Exception as e:
         print(e)
-        return jsonify (error = str(e)), 403
+        return jsonify (error = str(e)), 405
 
+@app.route("/api/save_changes", methods = ["POST"])
+def save_change():
+    form = ChangeStateForm()
+    print(request.method)
+    if (request.method == "POST"):
+        if (form.validate_on_submit()):
+            try:
+                sql = "update reservations set state = '{}' where res_id = {};".format(form.new_state.data, (form.res_id.data))
+                print(sql)
+                query(sql)
+                db.session.commit()
+                response = {
+                    "message": "success",
+                }
+                return jsonify(response), 200
+            except Exception as e:
+                response = {
+                    "message": "failure",
+                }
+                print ("HEllo: {}".format(e))
+                return jsonify(response), 405
+                
+        else:
+            response = {
+                    "message": "failure",
+                    "errors": form_errors(form)
+                }
+            print(form_errors(form))
+            return jsonify(response), 403
+    else:
+        response = {
+            "message": "failure",
+            "errors": "Bad Request"
+        }
+        return jsonify(response), 500
 
 @app.route("/api/reserve/<user_id>/<lot_id>", methods= ['POST'])
 def reserve_lot(lot_id, user_id):
@@ -180,11 +249,12 @@ def reserve_lot(lot_id, user_id):
     if(request.method == 'POST'):
         if (form.validate_on_submit()):
             try:
-                lot = Lot.query.filter_by(lot_id = lot_id).with_for_update().one() # locks the lot record so capacity can be changed
-                if(lot.occuped == lot.capacity):
+                lot = query("select * from lots where lot_id = {} for update;".format(lot_id)).first() # locks the lot record so capacity can be changed
+                if(lot['occupied'] == lot['capacity']):
                     raise LotIsFullError
-                lot.occupied += 1
-                db.session.add(lot)
+                occ = lot['occupied']
+                occ += 1
+                query("update lots set occupied = {} where lot_id = {};".format(occ, lot_id))
                 db.session.commit() # unlocks the record so that it can be edited again
             except LotIsFullError:
                 response = {
@@ -201,13 +271,17 @@ def reserve_lot(lot_id, user_id):
             path = ''.join((os.getcwd(), app.config['RESERVATIONS'], path))
             
             img.save(path)
-            res = Reservation(user_id=user_id, lot_id=lot_id, media_address = path, start_time = start, end_time = end, driver_name = driver_name, license_plate = license_plate)
+            user_id = int(user_id)
+            lot_id = int(lot_id)
+            query("insert into reservations (user_id, lot_id, media_address, start_time, end_time, driver_name, license_plate, state) values ({}, {}, '{}', '{}', '{}', '{}', '{}', 'P');".format(user_id, lot_id, path, start, end, driver_name, license_plate))
+            #res = Reservation(user_id=user_id, lot_id=lot_id, media_address = path, start_time = start, end_time = end, driver_name = driver_name, license_plate = license_plate)
             try:
-                db.session.add(res)
+                
                 db.session.commit()
                 response = {
                     "message":"Reservation creation successful.",
                 }
+                REQUESTS[form.token.data] = None
                 return jsonify(response), 200
             except Exception as e:
                 print("Error occurred: {}".format(e))
@@ -222,25 +296,55 @@ def reserve_lot(lot_id, user_id):
                 }
             return jsonify(response), 500
 
+def calc_distance(A, B):
+    y = (A[0] - B[0])**2
+    x = (A[1] - B[1])**2
+    return sqrt(y+x)
+
+def score_lot(i):
+    
+    dist = i['dist']
+    rate = round(i['rate'], 2)
+    rating = i['rating']
+    score = -1*dist - (rate/100) + 2*rating # attempt to scale parameters within the bounds (0, 10) in hopes of reducing the influence of magnitude on the final score of the lot
+    return score
+
 @app.route("/api/get", methods = ['GET'])
 def get_results():
     print("hello")
+    global REQUESTS
+    results = []
+    buff = {}
     try:
         token = request.args.get('tok')
         try:
             page = int(request.args.get('page'))
         except:
             page = 1
-        lst = slice_results(lst = REQUESTS[token], page = page)
+        lst = slice_results(lst = REQUESTS[token][0], page = page)
+        point = (uniform(-76, -78), uniform(17, 19))
+        for i in lst:
+            buff = {
+                "lot_id":i['lot_id'],
+                "owner_id":i['owner_id'],
+                "street_addr":i['street_addr'],
+                "capacity":i['capacity'],
+                "occupied":i['occupied'],
+                "remaining": (i['capacity'] - i['occupied']),
+                "dist": round(calc_distance(REQUESTS[token][1], (i['longitude'], i['latitude'])), 3),
+                "rate": round(i['hourly_rate'], 2),
+                "rating": i['avg_rating'],
+            }
+            results.append(buff)
+        results = sorted(results, key = score_lot)
         response = {
                 "tok": token,
                 "message": "List of options",
-                "lots": lst,
+                "lots": results,
                 "start": (20*(page-1))+1,
                 "end": (20*(page)),
-                "num_lots": len(REQUESTS[token])
+                "num_lots": len(REQUESTS[token][0])
             }
-        
         return jsonify(response), 200
     except StopIteration:
         msg = "No more results in this list!"
@@ -250,35 +354,6 @@ def get_results():
         msg = "Unknown Error occurred: Error details: {}".format(e)
         print(msg)
         return jsonify(msg, 500)
-
-@app.route("/free_set")
-def set_free_token():
-    global NUM_REQUESTS 
-    global REQUESTS
-    NUM_REQUESTS += 1
-    tok = token_urlsafe(16)
-    lst = [floor(random()*1000) for x in range (0, 100)]
-    print("{}: ".format(tok), end = "")
-    print(lst)
-    REQUESTS[tok] = get_res_slice(lst)
-    msg = "Good news, your request is being processed. Your token is: {}".format(tok)
-    return render_template("base.html", message = msg, tok = tok)
-
-@app.route("/get/<token>/<num_res>")
-def get_n_results(token, num_res):
-    try:
-        msg = next(REQUESTS[token], num_res)
-        return render_template("base.html", message = msg, tok = None)
-    except StopIteration:
-        msg = "No more results in this request!"
-        return render_template("base.html", message = msg, tok = None)
-    except IndexError:
-        msg = "No more results in this request!"
-        return render_template("base.html", message = msg, tok = None)
-    except Exception as e:
-        msg = "Unknown Error occurred: Error details: {}".format(e)
-        return render_template("base.html", message = msg, tok = None)
-
 
 #JWT Token checking
 def requires_auth(f):
@@ -322,31 +397,35 @@ def home(path):
     return render_template('index.html')
 
 #NEED TO FIX JWT TOKEN
-@app.route("/api/auth/login", methods=["GET", "POST"])
+@app.route("/api/auth/login", methods=["POST"])
 def login():
     form = LoginForm()
     if request.method == "POST" and form.validate_on_submit():        
-        if form.username.data:
+        if form.email.data:
             # Get the username and password values from the form.
-            username = form.username.data
+            email = form.email.data
             password = form.password.data
             # using your model, query database for a user based on the username
             # and password submitted. Remember you need to compare the password hash.
             # You will need to import the appropriate function to do so.
             # Then store the result of that query to a `user` variable so it can be
             # passed to the login_user() method below.
-            user = User.query.filter_by(username=username).first()
+            user = query("SELECT * FROM users WHERE email = '{}';".format(email)).first()
+            print(user)
             # get user id, load into session
-            if user is not None and check_password_hash(user.password, password):
+            if user is not None and check_password_hash(user['password_hash'], (password + str(user['salt']))):
                 print(user)
-                login_user(user)
-                ids = {'user': user.username}
+                SESSIONS[user['user_id']] = True # mark that the user with this id has a session currently active
+                ids = {'user': user['email']}
                 token = jwt.encode(ids, app.config['SECRET_KEY'], algorithm = 'HS256')
 
                 data = {
                     "message": "Login Successful",
                     "token": token,
-                    "user_id": user.id,
+                    "user_id": user['user_id'],
+                    "role": user['role'],
+                    "email": user['email'],
+                    "name": user['name'],
                     "success": 1
                 }             
                 flash ("Login successful!", "success")
@@ -356,7 +435,6 @@ def login():
     all_errors = form_errors(form)
     return jsonify(errors=all_errors)
     
-
 @app.route("/api/auth/logout", methods=["POST"])
 @login_required
 def logout():
@@ -368,51 +446,42 @@ def logout():
         flash("You have been logged out.", "danger")
         return redirect("/login")
     
-
-
 @app.route("/api/register", methods=["POST"])
 def register():
-    form = RegisterUserForm()
+    form = RegistrationForm()
 
     if request.method == "POST": # and form.validate_on_submit()
-        username = form.username.data
-        user = User.query.filter_by(username=username).first()
+        email = form.email.data
+        user = query("SELECT * from users where email = '{}';".format(email)).first()
+        print(user)
         if user is None: 
             password = form.password.data
-            name = form.name.data
-            email = form.email.data
-            location = form.location.data
-            biography = form.biography.data
-            photo = form.photo.data
-            print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii")
-            print(photo)
-            filename = secure_filename(photo.filename)
-            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-            date_joined = datetime.now()
-            #NOT SURE IF DATE JOINED MUST BE IN CONSTRUCTOR HERE OR SET IN DB
-            newUser = User(username, password, name, email, location, biography, filename, date_joined)
-
-            db.session.add(newUser)
-            db.session.commit()
-            flash ("User added successfully", "success")
-            flash("Please login with your credentials below")
-            data = {
-                "id": newUser.id,
-                "username": username,
-                "password": password,
-                "name": name,
-                "email": email,
-                "location": location,
-                "biography": biography,
-                "photo": filename,
-                "date_joined": date_joined
-            }
-            return jsonify({"message":"User regristration Successful", "username": username, "date_joined" : date_joined, "success":1}) 
+            conf_pass = form.conf_password.data
+            if (password == conf_pass):
+                salt = randint(1, 10000)
+                pass_hash = generate_password_hash((password + str(salt)), method='pbkdf2:sha256')
+                name = form.name.data
+                role = form.role.data
+                print(role)
+                phone_num = form.phone_num.data
+                query("insert into users (email, name, role, phone_num, salt, password_hash) values ('{}', '{}', '{}', '{}', {}, '{}');".format(email, name, role, phone_num, salt, pass_hash))
+                db.session.commit()
+                flash ("User added successfully", "success")
+                flash("Please login with your credentials below")
+                
+                return jsonify({"message":"User regristration Successful", "username": email, "success":1}) 
+            else:
+                response = {
+                    "message": "Error tampering detected. Please try again later."
+                }
+                return jsonify(response), 403
         else:
             flash ("Someone is already using this username", "danger")
+            print("hello")
             return jsonify({"message":"User already registered", "success":0}) 
     else:
         errors = form_errors(form)
+        print("ello govna")
         return jsonify(errors=form_errors(errors))
 
 # user_loader callback. This callback is used to reload the user object from
@@ -424,67 +493,42 @@ def load_user(id):
 ###
 # The functions below should be applicable to all Flask apps.
 ###
-
-@app.route("/api/cars/<car_id>/favourite", methods=["POST"])
-@requires_auth
-def favourite(car_id):
-    if(car_id == 'undefined'):
-        car_id = request.args.get('id')
-    if request.method == "POST":
-        user = User.query.filter_by(username=g.current_user["user"]).first()
-        user_id = user.id
-        # user_id = g.current_user["user"] #IDK HOW TO GET THIS FROM THE AUTH
-        
-        newFav = Favourite(car_id, user_id)
-        
-        try:
-            db.session.add(newFav)
-            db.session.commit()
+@app.route("/api/lots", methods = ["POST"])
+def new_lot():
+    form = RegisterLotForm()
+    owner_id = request.args.get('owner_id')
+    if (request.method == "POST"):
+        if (form.validate_on_submit()):
+            addr = form.street_addr.data
+            print("Addr: {}".format(addr))
+            rate = float(form.rate.data)
+            longitude = uniform(-78, -76)
+            latitude = uniform(16, 18)
+            capacity = form.capacity.data
+            img = form.photo.data
             
+            path = secure_filename(img.filename)
+            print("Path: {}".format(path))
+            path = ''.join((os.getcwd(), app.config['TITLES'], path))
+            img.save(path)
+            query("INSERT INTO lots (owner_id, street_addr, capacity, occupied, latitude, longitude, hourly_rate, num_ratings, avg_rating, certified, title_address) values ({}, '{}', {}, {}, {}, {}, {}, {}, {}, {}, '{}');".format(owner_id, addr, capacity, 0, latitude, longitude, rate, 0, 0, False, path))
             response = {
-                "message": "Car Successfully Favourited",
-                "car_id": car_id
+                "message":"success"
             }
-            return jsonify(response), 200
-        except Exception as e:
-            print(e)
-            response = {
-                "message": "Access token is missing or invalid",                
-            }
-            return jsonify(response), 401
-
-     
-@app.route("/api/cars/<car_id>/remove_favourite", methods=["POST"])
-@requires_auth
-def remove_favourite(car_id):
-    if(car_id == 'undefined'):
-        car_id = request.args.get('id')
-    if request.method == "POST":
-        user = User.query.filter_by(username=g.current_user["user"]).first()
-        user_id = user.id
-        # user_id = g.current_user["user"] #IDK HOW TO GET THIS FROM THE AUTH
-        
-        
-        
-        try:
-            Favourite.query.filter_by(
-                car_id = car_id,
-                user_id = user_id
-            ).delete()
             db.session.commit()
-            
-            response = {
-                "message": "Car Successfully unavourited",
-                "car_id": car_id
-            }
             return jsonify(response), 200
-        except Exception as e:
-            print(e)
+        else:
+            print(form_errors(form))
             response = {
-                "message": "Access token is missing or invalid",                
+                "message":"form error"
             }
-            return jsonify(response), 401
-
+            return jsonify(response), 403
+    else:
+        print("bad request")
+        response = {
+            "message":"bad request"
+        }
+        return jsonify(response), 500
 
 @app.route("/api/search", methods=["POST"])
 @requires_auth
@@ -512,93 +556,6 @@ def search():
     else:
         print(form.errors)
 
-@app.route("/api/users/<user_id>", methods=["GET"])
-@requires_auth
-def getUser(user_id):
-    try:
-        print("HELLOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOoo")
-        print(user_id)
-        user = User.query.filter_by(id=user_id).first()
-        print(user.username)
-        response = {
-            "id": user.id,
-            "username": user.username,
-            "password": user.password,
-            "name": user.name,
-            "email": user.email,
-            "location": user.location,
-            "biography": user.biography,
-            "photo": user.photo,
-            "date_joined": user.date_joined
-        }
-        return jsonify(response), 200
-    except:
-        response = {
-            "message": "Access token is missing or invalid"
-        }
-        return jsonify(response), 401
-
-
-def make_car_dict(fave: int):
-    print("hey")
-    car = Car.query.filter_by(id=fave).first()
-    buff = {}
-    
-    buff['make'] = car.__dict__['make']
-    buff['model'] = car.__dict__['model']
-    buff['photo'] = car.__dict__['photo']
-    buff['year'] = car.__dict__['year']
-    buff['id'] = car.__dict__['id']
-    buff['price'] = car.__dict__['price']
-   
-    return buff
-
-@app.route("/api/cars/<user_id>/favourites", methods=["GET"])
-@requires_auth
-def userFavourites(user_id):        
-    if request.method == "GET":
-        '''try:
-            favourites = Favourite.query.filter_by(id=user_id).first()
-            fave_car = Car.query.filter_by(id=favourites.car_id).first()
-        except:
-            favourites = []
-            fave_car = '''
-        try:
-            try:
-                print("test 1")
-                try:
-                    fave_list = Favourite.query.filter_by(user_id=user_id).all()
-                except Exception as e:
-                    print(e)
-            except Exception as e:
-                fave_list = ''
-            #print("HELLLLLLLLLLLLLOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
-            #print(fave_list)
-            
-            print("HEllo")
-            print(fave_list)       
-            response = {
-                "message": "List of Favourites",
-                "num_fave": len(fave_list),
-                "favourites": [make_car_dict(fav.car_id) for fav in fave_list]
-                #"car_id": car_id
-            }
-            print(response)
-            '''if fave_list is not []:
-                car_list = []
-                for fave in fave_list:
-                    car = Car.query.filter_by(fave.car_id).first()
-                    car_list.append(car.photo)
-                response['car_list'] = car_list
-            return jsonify(response), 200'''
-            return jsonify(response), 200
-        except Exception as e:
-            print (e)
-            response = {
-                "message": "Access token is missing or invalid",                
-            }
-            return jsonify(response), 401
-
 @app.route('/token')
 def generate_token():
     # Under normal circumstances you would generate this token when a user
@@ -619,9 +576,6 @@ def generate_token():
     # resp.set_cookie('token', "Bearer " + token, httponly=True, secure=True)
     # return resp
 
-
-
-
 def form_errors(form):
     error_messages = []
     """Collects form errors"""
@@ -631,11 +585,6 @@ def form_errors(form):
             message = u"Error in the %s field - %s" % (getattr(form, field).label.text, error)
             error_messages.append(message)
     return error_messages
-    
-    
-
-
-
 
 @app.route('/<file_name>.txt')
 def send_text_file(file_name):

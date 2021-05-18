@@ -15,4 +15,3 @@ login_manager.login_view = 'login'
 csrf = CSRFProtect(app)
 
 app.config.from_object(Config)
-from app import views

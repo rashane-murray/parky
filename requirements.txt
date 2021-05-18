@@ -12,6 +12,7 @@ Flask-Script
 Flask-Login
 psycopg2
 email_validator
+Image
 PyJWT==2.0.1
 qrcode
 stripe

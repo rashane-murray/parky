@@ -1,8 +1,10 @@
-from . import db
+from . import app, db
 import json
 from werkzeug.security import generate_password_hash
+from sqlalchemy import create_engine, MetaData
 
 class Lot(db.Model):
+    
     __tablename__ = 'lots'
 
     lot_id = db.Column(db.Integer, primary_key = True)
@@ -18,7 +20,7 @@ class Lot(db.Model):
     certified = db.Column(db.Boolean)
     title_address = db.Column(db.String(60))
 
-    def __init__(self, street_addr, latitude, longitude, hourly_rate, title_address, owner_id, capacity):
+    def __init__(self, street_addr, latitude, longitude, hourly_rate, title_address, owner_id, capacity, certified = False, avg_rating = 0, num_ratings = 0):
         self.street_addr = street_addr
         self.owner_id = owner_id
         self.capacity = capacity
@@ -26,9 +28,9 @@ class Lot(db.Model):
         self.longitude = longitude
         self.hourly_rate = hourly_rate
         self.title_address = title_address
-        self.certified = False
-        self.avg_rating = 0
-        self.num_ratings = 0
+        self.certified = certified
+        self.avg_rating = avg_rating
+        self.num_ratings = num_ratings
         self.occupied = 0
 
     def get_id(self):
@@ -82,6 +84,20 @@ class User(db.Model):
     def __repr__(self):
         return '<User %r>' % (self.username)
 
+class Review(db.Model):
+    __tablename__ = 'reviews'
+
+    rev_id = db.Column(db.Integer, primary_key=True)
+    lot_id = db.Column(db.Integer)
+    rating = db.Column(db.Integer)
+    review_text = db.Column(db.String(300))
+
+    def __init__(lot_id, rating, review_text):
+        self.lot_id = lot_id
+        self.rating = rating
+        self.review_text = review_text
+        
+
 class Reservation(db.Model):
 
     __tablename__ = 'reservations'
@@ -90,17 +106,19 @@ class Reservation(db.Model):
     user_id = db.Column(db.Integer)
     lot_id = db.Column(db.Integer)
     end_time = db.Column(db.String(6))
+    
     start_time = db.Column(db.String(6))
     driver_name = db.Column(db.String(40))
     media_address = db.Column(db.String(70))
     license_plate = db.Column(db.String(10))
     state = db.Column(db.String(2))
 
-    def __init__(self, user_id, lot_id, start_time, end_time, driver_name, license_plate, media_address):
+    def __init__(self, user_id, lot_id,  start_time, end_time, driver_name, license_plate, media_address):
         self.user_id = user_id
         self.lot_id = lot_id
         self.end_time = end_time
         self.start_time = start_time
+        
         self.driver_name = driver_name
         self.media_address = media_address
         self.license_plate = license_plate
@@ -111,3 +129,23 @@ class Reservation(db.Model):
             return unicode(self.id)  # python 2 support
         except NameError:
             return str(self.id)  # python 3 support
+
+try:
+    engine = create_engine(app.config['DATABASE_URI'], echo = True)
+    meta = MetaData()
+    meta.create_all(engine)
+    print(meta.tables.keys())
+except Exception as e:
+    print("An error occurred, error details:\n---------------------\n{}\n---------------------\n".format(e))
+    exit(1)
+
+
+def query(sql):
+    results = "An error occurred.\n"
+    print(sql)
+    with engine.connect() as connection:
+        try:
+            results = connection.execute(sql)
+        except Exception as e:
+            print("An error occurred, error details:\n---------------------\n{}\n---------------------\n".format(e))
+    return results

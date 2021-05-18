@@ -1,0 +1,150 @@
+th{
+	padding-left:10px;
+	padding-right:10px;
+	text-align: center;
+}
+
+td{
+    padding-top: 5px;
+    padding-bottom: 5px;
+	padding-left:10px;
+	padding-right:10px;
+	text-align: center;
+}
+
+.state{
+    margin-right: 7px;
+    margin-left: 7px;
+    border: solid 1px;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 15px;
+    padding: 5px;
+    width: 50px;
+}
+
+.success{
+    color: rgb(4, 131, 21);
+    margin-left: 20px;
+}
+
+.failure{
+    color: rgb(136, 1, 1);
+    margin-left: 20px;
+}
+  
+  .new-state{
+    
+    border: solid 1px;
+    text-align: center;
+    font-weight: bold;
+    border-radius: 15px;
+    padding: 5px;
+    width :100%;
+  }
+  
+  .P {
+    background-color: #fff;
+    border-color: #888;
+    color: #888;
+  }
+  
+  .P:hover{
+    background-color: #888;
+    border-color: #fff;
+    color: #fff;
+  }
+  
+  .A{
+    background-color: rgb(255, 238, 0);
+    color: rgb(0, 0, 0);
+    border-color: rgb(255, 238, 0);
+  }
+  
+  .A:hover{
+    background-color: rgb(224, 202, 0);
+    color: #000;
+    border-color: rgb(224, 202, 0);
+  }
+  
+  .C {
+    background-color: rgb(15, 241, 46);
+    border-color: rgb(15, 241, 46);
+    color: #fff;
+  }
+  
+  .C :hover{
+    background-color: rgb(136, 241, 136);
+    border-color: rgb(136, 241, 136);
+    color: #fff;
+  }
+  
+  .D{
+    background-color: rgb(241, 15, 46);
+    border-color: rgb(241, 15, 46);
+    color: #fff;
+  }
+  
+  .D:hover{
+    background-color: rgb(241, 136, 136);
+    border-color: rgb(241, 136, 136);
+    color: #fff;
+  }
+
+.form-input{
+	width: 100%;
+    padding: 8px 8px;
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-radius: 3px !important;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 14px;
+    font-weight: normal;
+	margin-top: 5px;
+	margin-bottom: 5px;
+    font-style: normal;
+    line-height: 1.2em;
+    background-color: transparent;
+    border-color: #cccccc;
+}
+
+.form-btn{
+	background-color: rgb(45, 97, 241);
+	color: #fff;
+	font-weight: bold;
+	border: solid;
+}
+
+.lot-picture{
+    height: 30px;
+    width: 30px;
+    border-radius: 50%;
+}
+
+.modal{
+	
+	display: none; /* Hidden by default */
+	position: absolute; /* Stay in place */
+	z-index: 1; /* Sit on top */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0,0,0); /* Fallback color */
+	background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+.modal-content{
+	
+	background-color: #fefefe;
+	margin: 15% auto; /* 15% from the top and centered */
+	padding: 20px;
+	border: 1px solid #888;
+	width: 80%; /* Could be more or less, depending on screen size */
+}
+
+.disabled{
+    background-color: #999;
+    color: #fff;
+}
